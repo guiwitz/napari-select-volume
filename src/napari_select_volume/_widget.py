@@ -20,10 +20,11 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from magicgui.widgets import create_widget
 
 from ._shapes_utils import get_rectangle_info, rotate_rectangle
 from ._transform import crop_and_rotate, numpy_to_sitk
-from ._writer import save_tiff, save_zarr_v3
+from ._writer import save_tiff, save_zarr_v3, save_zarr_ngio
 
 SHAPES_LAYER_NAME = "crop_region"
 
@@ -43,12 +44,21 @@ class SelectVolumeWidget(QWidget):
 
         self._build_ui()
 
+        # Keep cell-layer combobox in sync with the viewer
+        self.viewer.layers.events.inserted.connect(self._combo_image_layer.reset_choices)
+        self.viewer.layers.events.removed.connect(self._combo_image_layer.reset_choices)
+
     # ------------------------------------------------------------------
     # UI
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
         layout = QVBoxLayout()
         self.setLayout(layout)
+
+        # --- Image layer selector ---
+        self._combo_image_layer = create_widget(annotation=napari.layers.Image, label='Image layer')
+        self._combo_image_layer.reset_choices()
+        layout.addWidget(self._combo_image_layer.native)
 
         # --- Shape layer button ---
         btn_add_shape = QPushButton("Add Shape Layer")
@@ -102,7 +112,7 @@ class SelectVolumeWidget(QWidget):
         row_fmt = QHBoxLayout()
         row_fmt.addWidget(QLabel("Format:"))
         self._combo_fmt = QComboBox()
-        self._combo_fmt.addItems(["Zarr v3", "TIFF"])
+        self._combo_fmt.addItems(["TIFF", "Zarr v3"])
         row_fmt.addWidget(self._combo_fmt)
         layout.addLayout(row_fmt)
 
@@ -118,7 +128,7 @@ class SelectVolumeWidget(QWidget):
     # Callbacks
     # ------------------------------------------------------------------
     def _add_shapes_layer(self) -> None:
-        """Add (or reuse) a Shapes layer for drawing crop rectangles."""
+        """Add (or reuse) a Shapes layer with a default square in the view centre."""
         # Remove existing layer with the same name to avoid duplicates
         existing = [l for l in self.viewer.layers if l.name == SHAPES_LAYER_NAME]
         for l in existing:
@@ -129,8 +139,38 @@ class SelectVolumeWidget(QWidget):
         self._shape_count = 0
         self._slider_rot.setValue(0)
 
+        # --- Build a default square centred in the current view ---
+        displayed_axes = tuple(self.viewer.dims.displayed)  # e.g. (1, 2)
+        ax0, ax1 = displayed_axes
+        perp_axis = ({0, 1, 2} - set(displayed_axes)).pop()
+
+        try:
+            image_layer = self._get_active_image_layer()
+            shape = np.array(image_layer.data.shape)  # (Z, Y, X)
+        except RuntimeError:
+            shape = np.array([100, 100, 100])
+
+        dim0, dim1 = float(shape[ax0]), float(shape[ax1])
+        half = min(dim0, dim1) / 2.0
+        cx, cy = dim0 / 2.0, dim1 / 2.0
+        perp_val = float(self.viewer.dims.current_step[perp_axis])
+
+        # Corners: P0=top-left, P1=top-right, P2=bottom-right, P3=bottom-left
+        # (top = min ax0, left = min ax1)
+        corners_2d = np.array([
+            [cx - half / 2, cy - half / 2],  # P0 top-left
+            [cx - half / 2, cy + half / 2],  # P1 top-right
+            [cx + half / 2, cy + half / 2],  # P2 bottom-right
+            [cx + half / 2, cy - half / 2],  # P3 bottom-left
+        ])
+
+        default_rect = np.zeros((4, 3))
+        default_rect[:, perp_axis] = perp_val
+        default_rect[:, ax0] = corners_2d[:, 0]
+        default_rect[:, ax1] = corners_2d[:, 1]
+
         shapes_layer = self.viewer.add_shapes(
-            data=[],
+            data=[default_rect],
             shape_type="rectangle",
             edge_color="yellow",
             face_color="transparent",
@@ -138,12 +178,18 @@ class SelectVolumeWidget(QWidget):
             name=SHAPES_LAYER_NAME,
             ndim=3,
         )
-        shapes_layer.mode = "add_rectangle"
+        shapes_layer.mode = "direct"
         shapes_layer.events.data.connect(self._on_shape_data_changed)
+
+        # Store the default square as the 0° base
+        self._base_corners = default_rect.copy()
+        self._base_displayed_axes = displayed_axes
+        self._shape_count = 1
 
     def _on_shape_data_changed(self, _event=None) -> None:
         """Store the drawn rectangle as the 0° reference shape, or update the
-        base when the user moves/resizes an existing rectangle."""
+        base when the user moves/resizes an existing rectangle.
+        Only a single shape is allowed — newer shapes replace older ones."""
         try:
             shapes_layer = self._get_shapes_layer()
         except RuntimeError:
@@ -152,8 +198,17 @@ class SelectVolumeWidget(QWidget):
             return
 
         current_count = len(shapes_layer.data)
-        corners = np.asarray(shapes_layer.data[-1]).copy()
         displayed_axes = tuple(self.viewer.dims.displayed)
+
+        if current_count > 1:
+            # Keep only the last drawn shape
+            last = np.asarray(shapes_layer.data[-1]).copy()
+            shapes_layer.events.data.disconnect(self._on_shape_data_changed)
+            shapes_layer.data = [last]
+            shapes_layer.events.data.connect(self._on_shape_data_changed)
+            current_count = 1
+
+        corners = np.asarray(shapes_layer.data[-1]).copy()
 
         if current_count > self._shape_count:
             # A new rectangle was drawn → this is the 0° base
@@ -270,7 +325,7 @@ class SelectVolumeWidget(QWidget):
             if fmt == "Zarr v3":
                 if not path.endswith(".zarr"):
                     path += ".zarr"
-                save_zarr_v3(self._cropped_volume, path, tile_n)
+                save_zarr_ngio(self._cropped_volume, path, tile_n)
             else:
                 if not path.endswith((".tif", ".tiff")):
                     path += ".tif"
@@ -284,18 +339,12 @@ class SelectVolumeWidget(QWidget):
     # Helpers
     # ------------------------------------------------------------------
     def _get_active_image_layer(self) -> napari.layers.Image:
-        """Return the currently selected Image layer, or the first one found."""
-        sel = list(self.viewer.layers.selection)
-        for layer in sel:
-            if isinstance(layer, napari.layers.Image):
-                return layer
-
-        # Fallback: first image layer
-        for layer in self.viewer.layers:
-            if isinstance(layer, napari.layers.Image):
-                return layer
-
-        raise RuntimeError("No Image layer found in the viewer.")
+        """Return the currently selected Image layer"""
+        
+        if self._combo_image_layer.value is not None:
+            return self._combo_image_layer.value
+        else:
+            raise RuntimeError("No Image layer selected. Please select one from the dropdown.")
 
     def _get_shapes_layer(self):
         """Return the crop-region Shapes layer."""
