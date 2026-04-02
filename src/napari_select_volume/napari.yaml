@@ -1,0 +1,19 @@
+name: napari-select-volume
+display_name: Select Volume
+contributions:
+  commands:
+    - id: napari-select-volume.get_reader
+      python_name: napari_select_volume._reader:napari_get_reader
+      title: Open DICOM volume
+    - id: napari-select-volume.select_volume_widget
+      python_name: napari_select_volume._widget:SelectVolumeWidget
+      title: Select Volume
+  readers:
+    - command: napari-select-volume.get_reader
+      accepts_directories: true
+      filename_patterns:
+        - "*.dcm"
+        - "*.DCM"
+  widgets:
+    - command: napari-select-volume.select_volume_widget
+      display_name: Select Volume

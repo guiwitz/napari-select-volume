@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "napari-select-volume"
+version = "0.1.0"
+description = "Napari plugin for selecting, cropping and rotating sub-volumes from DICOM data"
+readme = "README.md"
+license = {text = "BSD-3-Clause"}
+requires-python = ">=3.9"
+dependencies = [
+    "napari",
+    "SimpleITK",
+    "zarr>=3.0",
+    "tifffile",
+    "qtpy",
+    "numpy",
+]
+
+[project.entry-points."napari.manifest"]
+napari-select-volume = "napari_select_volume:napari.yaml"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+napari_select_volume = ["napari.yaml"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.10"
+napari = "*"
+simpleitk = "*"
+numpy = "*"
+tifffile = "*"
+qtpy = "*"
+pyqt = "*"
+jupyterlab = ">=4.5.6,<5"
+
+[tool.pixi.pypi-dependencies]
+napari-select-volume = { path = ".", editable = true }
+zarr = ">=3.0"
+
+[tool.pixi.tasks]
+napari = "napari"
