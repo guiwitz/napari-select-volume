@@ -46,6 +46,31 @@ def save_zarr_v3(volume: np.ndarray, path: str, tile_n: int = 256) -> None:
     z[:] = volume
 
 
+def save_zarr_ngio(volume: np.ndarray, path: str, tile_n: int = 256) -> None:
+    """Save *volume* as an OME-Zarr using ngio with multi-scale pyramid.
+
+    Parameters
+    ----------
+    volume : (Z, Y, X) ndarray
+    path : str or Path
+        Destination ``.zarr`` directory.
+    tile_n : int
+        Tile edge length in pixels.
+    """
+    import ngio
+
+    nz, ny, nx = volume.shape
+
+    ngio.create_ome_zarr_from_array(
+        store=path,
+        array=volume,
+        axes_names=["z", "y", "x"],
+        chunks=(1, tile_n, tile_n),
+        shards=(1, ny, nx),
+        overwrite=True,
+    )
+
+
 def save_tiff(volume: np.ndarray, path: str, tile_n: int = 256) -> None:
     """Save *volume* as a tiled BigTIFF with zstd compression.
 
