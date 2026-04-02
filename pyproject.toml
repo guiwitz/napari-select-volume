@@ -17,6 +17,7 @@ dependencies = [
     "qtpy",
     "numpy",
     "ngio",
+    "ngff-zarr>=0.33.0",
 ]
 
 [project.entry-points."napari.manifest"]
@@ -41,11 +42,14 @@ tifffile = "*"
 qtpy = "*"
 pyqt = "*"
 jupyterlab = ">=4.5.6,<5"
+pandas = "<3.0.0"
+dask = "<2025.11.0"
 
 [tool.pixi.pypi-dependencies]
 napari-select-volume = { path = ".", editable = true }
 zarr = ">=3.0"
-ngio = "*"
+ngio = ">=0.5.0"
+ngff-zarr = ">=0.33.0"
 
 [tool.pixi.tasks]
 napari = "napari"

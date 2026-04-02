@@ -24,7 +24,7 @@ from magicgui.widgets import create_widget
 
 from ._shapes_utils import get_rectangle_info, rotate_rectangle
 from ._transform import crop_and_rotate, numpy_to_sitk
-from ._writer import save_tiff, save_zarr_v3, save_zarr_ngio
+from ._writer import save_tiff, save_zarr_ngio
 
 SHAPES_LAYER_NAME = "crop_region"
 
@@ -100,7 +100,7 @@ class SelectVolumeWidget(QWidget):
 
         # --- Tile size ---
         row_tile = QHBoxLayout()
-        row_tile.addWidget(QLabel("Tile size (N):"))
+        row_tile.addWidget(QLabel("Tile size (px):"))
         self._spin_tile = QSpinBox()
         self._spin_tile.setRange(32, 4096)
         self._spin_tile.setSingleStep(32)
@@ -147,6 +147,8 @@ class SelectVolumeWidget(QWidget):
         try:
             image_layer = self._get_active_image_layer()
             shape = np.array(image_layer.data.shape)  # (Z, Y, X)
+            scale = image_layer.scale  # (z, y, x)
+            translate = image_layer.translate  # (z, y, x)
         except RuntimeError:
             shape = np.array([100, 100, 100])
 
@@ -177,6 +179,8 @@ class SelectVolumeWidget(QWidget):
             edge_width=2,
             name=SHAPES_LAYER_NAME,
             ndim=3,
+            scale=scale,
+            translate=translate,
         )
         shapes_layer.mode = "direct"
         shapes_layer.events.data.connect(self._on_shape_data_changed)
@@ -299,6 +303,7 @@ class SelectVolumeWidget(QWidget):
                 result,
                 scale=out_scale,
                 name=f"{image_layer.name}_cropped",
+                translate=image_layer.translate,
             )
         except Exception as exc:
             self._warn(f"Crop & Rotate failed:\n{exc}\n\n{traceback.format_exc()}")
@@ -310,7 +315,7 @@ class SelectVolumeWidget(QWidget):
             return
 
         fmt = self._combo_fmt.currentText()
-        tile_n = self._spin_tile.value()
+        tile_size = self._spin_tile.value()
 
         if fmt == "Zarr v3":
             filt = "Zarr store (*.zarr)"
@@ -325,11 +330,11 @@ class SelectVolumeWidget(QWidget):
             if fmt == "Zarr v3":
                 if not path.endswith(".zarr"):
                     path += ".zarr"
-                save_zarr_ngio(self._cropped_volume, path, tile_n)
+                save_zarr_ngio(self._cropped_volume, path, tile_size)
             else:
                 if not path.endswith((".tif", ".tiff")):
                     path += ".tif"
-                save_tiff(self._cropped_volume, path, tile_n)
+                save_tiff(self._cropped_volume, path, tile_size)
 
             QMessageBox.information(self, "Saved", f"Volume saved to:\n{path}")
         except Exception as exc:
