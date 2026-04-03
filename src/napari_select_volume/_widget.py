@@ -40,6 +40,7 @@ class SelectVolumeWidget(QWidget):
         # Base (unrotated) rectangle corners and the displayed axes when drawn
         self._base_corners: np.ndarray | None = None
         self._base_displayed_axes: tuple[int, int] | None = None
+        self._base_edge_angle: float = 0.0  # arctan2 of base edge (P0→P1)
         self._shape_count: int = 0  # track number of shapes to detect new vs move
 
         self._build_ui()
@@ -99,14 +100,15 @@ class SelectVolumeWidget(QWidget):
         layout.addSpacing(12)
 
         # --- Tile size ---
-        row_tile = QHBoxLayout()
+        # not used for now, need to figure out proper chunking strategy first
+        '''row_tile = QHBoxLayout()
         row_tile.addWidget(QLabel("Tile size (px):"))
         self._spin_tile = QSpinBox()
         self._spin_tile.setRange(32, 4096)
         self._spin_tile.setSingleStep(32)
         self._spin_tile.setValue(256)
         row_tile.addWidget(self._spin_tile)
-        layout.addLayout(row_tile)
+        layout.addLayout(row_tile)'''
 
         # --- Format selector ---
         row_fmt = QHBoxLayout()
@@ -188,6 +190,9 @@ class SelectVolumeWidget(QWidget):
         # Store the default square as the 0° base
         self._base_corners = default_rect.copy()
         self._base_displayed_axes = displayed_axes
+        b2d = default_rect[:, [ax0, ax1]]
+        edge_base = b2d[1] - b2d[0]
+        self._base_edge_angle = float(np.arctan2(edge_base[1], edge_base[0]))
         self._shape_count = 1
 
     def _on_shape_data_changed(self, _event=None) -> None:
@@ -218,6 +223,10 @@ class SelectVolumeWidget(QWidget):
             # A new rectangle was drawn → this is the 0° base
             self._base_corners = corners
             self._base_displayed_axes = displayed_axes
+            ax0, ax1 = displayed_axes
+            b2d = corners[:, [ax0, ax1]]
+            edge_base = b2d[1] - b2d[0]
+            self._base_edge_angle = float(np.arctan2(edge_base[1], edge_base[0]))
             self._shape_count = current_count
             self._slider_rot.blockSignals(True)
             self._slider_rot.setValue(0)
@@ -226,12 +235,28 @@ class SelectVolumeWidget(QWidget):
             self._spin_rot.setValue(0.0)
             self._spin_rot.blockSignals(False)
         else:
-            # Existing rectangle was moved/resized → reverse-rotate by current
-            # slider angle to recover the new base, keeping the angle intact.
-            current_angle = self._spin_rot.value()
-            self._base_corners = rotate_rectangle(
-                corners, displayed_axes, -current_angle
-            )
+            # Existing rectangle was moved, resized, or manually rotated.
+            # Detect the actual rotation relative to the base by comparing
+            # edge directions, then update the slider/spinbox.
+            if self._base_corners is not None:
+                ax0, ax1 = displayed_axes
+                c2d = corners[:, [ax0, ax1]]
+                edge_cur = c2d[1] - c2d[0]
+                angle_cur = np.arctan2(edge_cur[1], edge_cur[0])
+                detected_deg = np.rad2deg(angle_cur - self._base_edge_angle)
+
+                # Update widgets to reflect the detected angle
+                self._slider_rot.blockSignals(True)
+                self._slider_rot.setValue(int(round(detected_deg * 10)))
+                self._slider_rot.blockSignals(False)
+                self._spin_rot.blockSignals(True)
+                self._spin_rot.setValue(round(detected_deg, 1))
+                self._spin_rot.blockSignals(False)
+
+                # Recover the new base by reverse-rotating
+                self._base_corners = rotate_rectangle(
+                    corners, displayed_axes, -detected_deg
+                )
             self._base_displayed_axes = displayed_axes
 
     def _on_rotation_changed(self, value: int) -> None:
@@ -315,7 +340,7 @@ class SelectVolumeWidget(QWidget):
             return
 
         fmt = self._combo_fmt.currentText()
-        tile_size = self._spin_tile.value()
+        #tile_size = self._spin_tile.value()
 
         if fmt == "Zarr v3":
             filt = "Zarr store (*.zarr)"
@@ -330,11 +355,11 @@ class SelectVolumeWidget(QWidget):
             if fmt == "Zarr v3":
                 if not path.endswith(".zarr"):
                     path += ".zarr"
-                save_zarr_ngio(self._cropped_volume, path, tile_size)
+                save_zarr_ngio(self._cropped_volume, path)
             else:
                 if not path.endswith((".tif", ".tiff")):
                     path += ".tif"
-                save_tiff(self._cropped_volume, path, tile_size)
+                save_tiff(self._cropped_volume, path)#, tile_size)
 
             QMessageBox.information(self, "Saved", f"Volume saved to:\n{path}")
         except Exception as exc:
