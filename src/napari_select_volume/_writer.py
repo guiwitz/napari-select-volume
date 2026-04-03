@@ -1,7 +1,6 @@
 """Writers for Zarr v3 (sharded/tiled) and BigTIFF output."""
 
 from __future__ import annotations
-
 import numpy as np
 
 
@@ -18,13 +17,12 @@ def save_zarr_ngio(volume: np.ndarray, path: str, tile_size: int = 256) -> None:
     """
     import ngio
 
-    nz, ny, nx = volume.shape
-
     ngio.create_ome_zarr_from_array(
         store=path,
         array=volume,
         axes_names=["z", "y", "x"],
         levels=1,
+        pixelsize=(1.0, 1.0),
         overwrite=True,
     )
 
