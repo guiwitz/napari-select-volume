@@ -72,13 +72,13 @@ class SelectVolumeWidget(QWidget):
         row_rot = QHBoxLayout()
         row_rot.addWidget(QLabel("Rotation (°):"))
         self._slider_rot = QSlider(Qt.Orientation.Horizontal)
-        self._slider_rot.setRange(0, 1800)  # 0.0–180.0 in tenths of degree
+        self._slider_rot.setRange(-900, 900)  # 0.0–180.0 in tenths of degree
         self._slider_rot.setValue(0)
         self._slider_rot.setToolTip("Rotate the drawn rectangle (0–180°)")
         self._slider_rot.valueChanged.connect(self._on_rotation_changed)
         row_rot.addWidget(self._slider_rot)
         self._spin_rot = QDoubleSpinBox()
-        self._spin_rot.setRange(0.0, 180.0)
+        self._spin_rot.setRange(-90.0, 90.0)
         self._spin_rot.setDecimals(1)
         self._spin_rot.setSingleStep(0.5)
         self._spin_rot.setSuffix("°")
