@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import SimpleITK as sitk
 
@@ -92,8 +90,8 @@ def crop_and_rotate(
     # Output size: width and height of the rectangle (in pixels) along the
     # two displayed axes; full extent along the perpendicular axis.
     out_size = [0, 0, 0]
-    out_size[ax0_sitk] = int(math.ceil(rect_info.height))
-    out_size[ax1_sitk] = int(math.ceil(rect_info.width))
+    out_size[ax0_sitk] = int(np.ceil(rect_info.height))
+    out_size[ax1_sitk] = int(np.ceil(rect_info.width))
     out_size[perp_sitk] = size[perp_sitk]
 
     # Output origin: the physical position that maps to the output voxel (0,0,0).
