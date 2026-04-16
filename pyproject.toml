@@ -10,7 +10,6 @@ readme = "README.md"
 license = {text = "BSD-3-Clause"}
 requires-python = ">=3.9"
 dependencies = [
-    "napari",
     "SimpleITK",
     "zarr>=3.0",
     "tifffile",
