@@ -12,7 +12,7 @@ A napari plugin to crop and rotate subvolumes in 3D images.
 You can use pixi to simplify the installation of the plugin and all extensions. For this:
 1. Install pixi: https://pixi.prefix.dev/latest/installation/
 2. Create folder and type `pixi init` to create a pixi.toml file.
-3. To install the plugin, type `pixi add python=3.13` then `pixi add --pypi "napari-select-volume @ git+https://github.com/guiwitz/napari-select-volume.git"`
+3. To install the plugin, type `pixi add python=3.13 napari pyqt` then `pixi add --pypi "napari-select-volume @ git+https://github.com/guiwitz/napari-select-volume.git"`
 4. Launch pixi with `pixi run napari` and open the plugin from the menu.
 
 ### conda
